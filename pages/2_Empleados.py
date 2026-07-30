@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 from database import get_connection, get_ubicaciones
+from excel_utils import exportar_excel, plantilla_empleados
 
 st.set_page_config(page_title="Empleados", page_icon="👥", layout="wide")
 
@@ -16,8 +17,9 @@ if not ubicaciones:
     st.stop()
 
 ubicacion_nombres = {u["id"]: u["nombre"] for u in ubicaciones}
+ubicacion_por_nombre = {v: k for k, v in ubicacion_nombres.items()}
 
-tab_lista, tab_nuevo = st.tabs(["📋 Lista de empleados", "➕ Nuevo empleado"])
+tab_lista, tab_nuevo, tab_excel = st.tabs(["📋 Lista de empleados", "➕ Nuevo empleado", "📁 Cargar/Descargar Excel"])
 
 with tab_lista:
     with get_connection() as conn:
@@ -38,6 +40,13 @@ with tab_lista:
                         "fecha_ingreso", "estado", "eps", "fondo_pension", "arl", "caja_compensacion"]],
             use_container_width=True,
             hide_index=True
+        )
+
+        st.download_button(
+            "⬇️ Descargar esta lista en Excel",
+            data=exportar_excel(df_mostrar.drop(columns=["ubicacion_id"]), "Empleados"),
+            file_name="empleados.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
 
         st.divider()
@@ -139,3 +148,82 @@ with tab_nuevo:
                 """, (nombre, identificacion, cargo, ubicacion_id, str(fecha_ingreso), salario_base, valor_hora,
                       telefono, eps, fondo_pension, arl, caja_compensacion))
             st.success(f"Empleado '{nombre}' agregado correctamente.")
+
+with tab_excel:
+    st.subheader("Descargar plantilla")
+    st.caption("Descarga la plantilla, llénala con tus empleados (una fila por persona) y súbela abajo.")
+    st.download_button(
+        "⬇️ Descargar plantilla de Excel",
+        data=plantilla_empleados(),
+        file_name="plantilla_empleados.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
+    st.caption(f"Ubicaciones válidas para la columna 'ubicacion': {', '.join(ubicacion_nombres.values())}")
+
+    st.divider()
+    st.subheader("Cargar empleados desde Excel")
+    archivo = st.file_uploader("Selecciona el archivo .xlsx", type=["xlsx"])
+
+    if archivo is not None:
+        try:
+            df_carga = pd.read_excel(archivo)
+        except Exception as e:
+            st.error(f"No se pudo leer el archivo: {e}")
+            df_carga = None
+
+        if df_carga is not None:
+            columnas_esperadas = {
+                "nombre", "identificacion", "cargo", "ubicacion", "fecha_ingreso",
+                "salario_base", "valor_hora", "telefono", "eps", "fondo_pension",
+                "arl", "caja_compensacion"
+            }
+            faltantes = columnas_esperadas - set(df_carga.columns)
+            if faltantes:
+                st.error(f"Al archivo le faltan estas columnas: {', '.join(faltantes)}. Usa la plantilla como base.")
+            else:
+                st.write("Vista previa:")
+                st.dataframe(df_carga, use_container_width=True, hide_index=True)
+
+                if st.button("✅ Confirmar carga de estos empleados"):
+                    insertados, errores = 0, []
+                    with get_connection() as conn:
+                        for i, fila in df_carga.iterrows():
+                            nombre_fila = str(fila.get("nombre", "")).strip()
+                            if not nombre_fila or nombre_fila.lower() == "nan":
+                                continue
+
+                            ubicacion_nombre = str(fila.get("ubicacion", "")).strip()
+                            ubicacion_id = ubicacion_por_nombre.get(ubicacion_nombre)
+                            if ubicacion_id is None:
+                                errores.append(f"Fila {i + 2}: ubicación '{ubicacion_nombre}' no existe. Créala en Configuración.")
+                                continue
+
+                            try:
+                                conn.execute("""
+                                    INSERT INTO empleados (nombre, identificacion, cargo, ubicacion_id, fecha_ingreso,
+                                    salario_base, valor_hora, telefono, eps, fondo_pension, arl, caja_compensacion)
+                                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                """, (
+                                    nombre_fila,
+                                    str(fila.get("identificacion", "")).strip(),
+                                    str(fila.get("cargo", "")).strip(),
+                                    ubicacion_id,
+                                    str(fila.get("fecha_ingreso", "")).strip(),
+                                    float(fila.get("salario_base", 0) or 0),
+                                    float(fila.get("valor_hora", 0) or 0),
+                                    str(fila.get("telefono", "")).strip(),
+                                    str(fila.get("eps", "")).strip(),
+                                    str(fila.get("fondo_pension", "")).strip(),
+                                    str(fila.get("arl", "")).strip(),
+                                    str(fila.get("caja_compensacion", "")).strip(),
+                                ))
+                                insertados += 1
+                            except Exception as e:
+                                errores.append(f"Fila {i + 2} ({nombre_fila}): {e}")
+
+                    if insertados:
+                        st.success(f"Se cargaron {insertados} empleado(s) correctamente.")
+                    if errores:
+                        st.warning("Algunas filas no se pudieron cargar:\n\n" + "\n".join(errores))
+                    if insertados:
+                        st.rerun()

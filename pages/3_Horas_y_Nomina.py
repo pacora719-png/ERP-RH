@@ -1,7 +1,8 @@
 import streamlit as st
 import pandas as pd
-from datetime import datetime, time
+from datetime import datetime, time, timedelta, date
 from database import get_connection, get_ubicaciones
+from excel_utils import exportar_excel
 
 st.set_page_config(page_title="Horas y Nómina", page_icon="⏱️", layout="wide")
 
@@ -68,11 +69,27 @@ with tab_registrar:
 
 # ---------- HISTORIAL / NÓMINA ----------
 with tab_historial:
-    col1, col2 = st.columns(2)
-    with col1:
-        fecha_inicio = st.date_input("Desde", key="hist_desde")
-    with col2:
-        fecha_fin = st.date_input("Hasta", key="hist_hasta")
+    st.caption("Elige un rango de fechas, o usa el atajo de 'semana actual' / 'semana pasada'.")
+    atajo = st.radio("Atajo rápido", ["Rango personalizado", "Semana actual", "Semana pasada"], horizontal=True)
+
+    hoy = date.today()
+    inicio_semana_actual = hoy - timedelta(days=hoy.weekday())  # lunes de esta semana
+
+    if atajo == "Semana actual":
+        fecha_inicio = inicio_semana_actual
+        fecha_fin = inicio_semana_actual + timedelta(days=6)
+    elif atajo == "Semana pasada":
+        fecha_inicio = inicio_semana_actual - timedelta(days=7)
+        fecha_fin = inicio_semana_actual - timedelta(days=1)
+    else:
+        col1, col2 = st.columns(2)
+        with col1:
+            fecha_inicio = st.date_input("Desde", key="hist_desde")
+        with col2:
+            fecha_fin = st.date_input("Hasta", key="hist_hasta")
+
+    if atajo != "Rango personalizado":
+        st.info(f"Mostrando del **{fecha_inicio}** al **{fecha_fin}**")
 
     with get_connection() as conn:
         df = pd.read_sql_query("""
@@ -89,12 +106,10 @@ with tab_historial:
         df["pago_extra"] = df["horas_extra"] * df["valor_hora"] * 1.25  # recargo del 25% para hora extra
         df["total_a_pagar"] = df["pago_normales"] + df["pago_extra"] + df["bonificacion"] - df["deduccion"]
 
-        st.dataframe(
-            df[["fecha", "empleado_nombre", "horas_normales", "horas_extra",
-                "bonificacion", "deduccion", "total_a_pagar"]],
-            use_container_width=True,
-            hide_index=True
-        )
+        detalle_mostrar = df[["fecha", "empleado_nombre", "horas_normales", "horas_extra",
+                               "bonificacion", "deduccion", "total_a_pagar"]]
+
+        st.dataframe(detalle_mostrar, use_container_width=True, hide_index=True)
 
         st.divider()
         st.subheader("Resumen de nómina por empleado")
@@ -108,3 +123,22 @@ with tab_historial:
 
         st.dataframe(resumen, use_container_width=True, hide_index=True)
         st.metric("Total nómina del período", f"${resumen['total_a_pagar'].sum():,.0f}")
+
+        st.divider()
+        nombre_archivo = f"horas_{fecha_inicio}_a_{fecha_fin}.xlsx"
+
+        col_a, col_b = st.columns(2)
+        with col_a:
+            st.download_button(
+                "⬇️ Descargar detalle diario en Excel",
+                data=exportar_excel(detalle_mostrar, "Detalle horas"),
+                file_name=nombre_archivo,
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
+        with col_b:
+            st.download_button(
+                "⬇️ Descargar resumen de nómina en Excel",
+                data=exportar_excel(resumen, "Resumen nómina"),
+                file_name=f"resumen_{nombre_archivo}",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )

@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 from database import get_connection
+from excel_utils import exportar_excel
 
 st.set_page_config(page_title="Asistencia", page_icon="📅", layout="wide")
 
@@ -64,6 +65,13 @@ with tab_historial:
             df_mostrar[["empleado_nombre", "tipo", "fecha_inicio", "fecha_fin", "comentario"]],
             use_container_width=True,
             hide_index=True
+        )
+
+        st.download_button(
+            "⬇️ Descargar en Excel",
+            data=exportar_excel(df_mostrar[["empleado_nombre", "tipo", "fecha_inicio", "fecha_fin", "comentario"]], "Asistencia"),
+            file_name="asistencia.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
 
         st.divider()

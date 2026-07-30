@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 from datetime import date
 from database import get_connection, get_ubicaciones
+from excel_utils import exportar_excel
 
 st.set_page_config(page_title="Inventario", page_icon="📦", layout="wide")
 
@@ -39,6 +40,13 @@ with tab_lista:
             df[["id", "nombre", "categoria", "unidad", "stock_actual", "stock_minimo", "costo_unitario", "ubicacion_nombre"]],
             use_container_width=True,
             hide_index=True
+        )
+
+        st.download_button(
+            "⬇️ Descargar en Excel",
+            data=exportar_excel(df.drop(columns=["ubicacion_id", "alerta"]), "Inventario"),
+            file_name="inventario.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
 
         st.divider()
