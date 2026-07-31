@@ -103,8 +103,9 @@ with tab_nomina:
     col3, col4 = st.columns(2)
     with col3:
         recargo_nocturno_simple = st.number_input("Recargo nocturno (%)", value=float(get_config("recargo_nocturno", "35")), step=5.0)
+        recargo_dominical_festivo_simple = st.number_input("Recargo dominical/festivo (%)", value=float(get_config("recargo_dominical_festivo", "100")), step=5.0)
     with col4:
-        recargo_dominical_simple = st.number_input("Recargo dominical (%)", value=float(get_config("recargo_dominical", "90")), step=5.0)
+        recargo_dominical_festivo_nocturno_simple = st.number_input("Recargo dominical/festivo nocturno (%)", value=float(get_config("recargo_dominical_festivo_nocturno", "150")), step=5.0)
 
     st.markdown("**Seguridad social y auxilio de transporte**")
     col5, col6 = st.columns(2)
@@ -128,7 +129,8 @@ with tab_nomina:
         set_config("recargo_extra_dominical_festivo", str(recargo_dominical_festivo))
         set_config("recargo_extra_dominical_festivo_nocturna", str(recargo_dominical_festivo_nocturna))
         set_config("recargo_nocturno", str(recargo_nocturno_simple))
-        set_config("recargo_dominical", str(recargo_dominical_simple))
+        set_config("recargo_dominical_festivo", str(recargo_dominical_festivo_simple))
+        set_config("recargo_dominical_festivo_nocturno", str(recargo_dominical_festivo_nocturno_simple))
         set_config("salud_pct", str(salud_pct))
         set_config("pension_pct", str(pension_pct))
         set_config("auxilio_transporte_mensual", str(auxilio_transporte))

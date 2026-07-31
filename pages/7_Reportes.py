@@ -35,7 +35,8 @@ if not horas_df.empty:
     )
     horas_df["pago_recargos"] = (
         horas_df["horas_recargo_nocturno"] * horas_df["valor_hora"] * m["recargo_nocturno"]
-        + horas_df["horas_recargo_dominical"] * horas_df["valor_hora"] * m["recargo_dominical"]
+        + horas_df["horas_recargo_dominical"] * horas_df["valor_hora"] * m["recargo_dominical_festivo"]
+        + horas_df["horas_recargo_dominical_festivo_nocturno"] * horas_df["valor_hora"] * m["recargo_dominical_festivo_nocturno"]
     )
     horas_df["pago_descuento"] = horas_df["horas_descuento"] * horas_df["valor_hora"]
     horas_df["total_liquidado"] = (

@@ -5,6 +5,7 @@ import io
 import zipfile
 from datetime import date
 from database import get_connection, get_config, get_multiplicadores, get_parametros_nomina, execute, read_sql_query
+from excel_utils import decimal_a_hhmm
 
 st.set_page_config(page_title="Liquidador de Nómina", page_icon="🧾", layout="wide")
 
@@ -51,10 +52,11 @@ def calcular_liquidacion(emp_row, horas_periodo, dias, extras):
     ef = valor_hora * m["extra_dominical_festivo"] * horas_periodo["horas_extra_dominical_festivo"]
     end = valor_hora * m["extra_dominical_festivo_nocturna"] * horas_periodo["horas_extra_dominical_festivo_nocturna"]
     rn = valor_hora * m["recargo_nocturno"] * horas_periodo["horas_recargo_nocturno"]
-    rd = valor_hora * m["recargo_dominical"] * horas_periodo["horas_recargo_dominical"]
+    rd = valor_hora * m["recargo_dominical_festivo"] * horas_periodo["horas_recargo_dominical"]
+    rdn = valor_hora * m["recargo_dominical_festivo_nocturno"] * horas_periodo["horas_recargo_dominical_festivo_nocturno"]
     descuento_tiempo = valor_hora * horas_periodo["horas_descuento"]
 
-    ibc = salario + ed + en + ef + end + rn + rd
+    ibc = salario + ed + en + ef + end + rn + rd + rdn
 
     salud = 0 if extras["no_salud"] else ibc * p["salud_pct"]
     pension = 0 if extras["no_pension"] else ibc * p["pension_pct"]
@@ -72,7 +74,7 @@ def calcular_liquidacion(emp_row, horas_periodo, dias, extras):
     neto = devengado - deducciones
 
     return {
-        "salario": salario, "ed": ed, "en": en, "ef": ef, "end": end, "rn": rn, "rd": rd,
+        "salario": salario, "ed": ed, "en": en, "ef": ef, "end": end, "rn": rn, "rd": rd, "rdn": rdn,
         "auxilio": auxilio, "bonificaciones": bonificaciones, "salud": salud, "pension": pension,
         "descuento_tiempo": descuento_tiempo, "deduccion_registrada": horas_periodo["deduccion"],
         "consumos": extras["consumos"], "danos": extras["danos"], "ahorros": extras["ahorros"],
@@ -118,12 +120,13 @@ def generar_pdf(emp_row, periodo, dias, horas_periodo, calculo):
     c.setFont("Helvetica-Bold", 11); c.drawString(50, y, "HORAS EXTRAS Y RECARGOS"); y -= 15
     c.setFont("Helvetica", 10)
     filas_horas = [
-        (f"Extra diurna ({horas_periodo['horas_extra_diurna']}h)", calculo["ed"]),
-        (f"Extra nocturna ({horas_periodo['horas_extra_nocturna']}h)", calculo["en"]),
-        (f"Extra dominical/festivo ({horas_periodo['horas_extra_dominical_festivo']}h)", calculo["ef"]),
-        (f"Extra dominical/festivo nocturna ({horas_periodo['horas_extra_dominical_festivo_nocturna']}h)", calculo["end"]),
-        (f"Recargo nocturno ({horas_periodo['horas_recargo_nocturno']}h)", calculo["rn"]),
-        (f"Recargo dominical ({horas_periodo['horas_recargo_dominical']}h)", calculo["rd"]),
+        (f"Extra diurna ({decimal_a_hhmm(horas_periodo['horas_extra_diurna'])})", calculo["ed"]),
+        (f"Extra nocturna ({decimal_a_hhmm(horas_periodo['horas_extra_nocturna'])})", calculo["en"]),
+        (f"Extra dominical/festivo ({decimal_a_hhmm(horas_periodo['horas_extra_dominical_festivo'])})", calculo["ef"]),
+        (f"Extra dominical/festivo nocturna ({decimal_a_hhmm(horas_periodo['horas_extra_dominical_festivo_nocturna'])})", calculo["end"]),
+        (f"Recargo nocturno ({decimal_a_hhmm(horas_periodo['horas_recargo_nocturno'])})", calculo["rn"]),
+        (f"Recargo dominical/festivo ({decimal_a_hhmm(horas_periodo['horas_recargo_dominical'])})", calculo["rd"]),
+        (f"Recargo dominical/festivo nocturno ({decimal_a_hhmm(horas_periodo['horas_recargo_dominical_festivo_nocturno'])})", calculo["rdn"]),
     ]
     for etiqueta, valor in filas_horas:
         c.drawString(50, y, etiqueta); c.drawRightString(550, y, pesos(valor)); y -= 15
@@ -133,7 +136,7 @@ def generar_pdf(emp_row, periodo, dias, horas_periodo, calculo):
     c.setFont("Helvetica", 10)
     filas_deducciones = [
         ("Salud", calculo["salud"]), ("Pensión", calculo["pension"]),
-        (f"Tiempo no laboral ({horas_periodo['horas_descuento']}h)", calculo["descuento_tiempo"]),
+        (f"Tiempo no laboral ({decimal_a_hhmm(horas_periodo['horas_descuento'])})", calculo["descuento_tiempo"]),
         ("Deducciones registradas en horas", calculo["deduccion_registrada"]),
         ("Consumos", calculo["consumos"]), ("Daños", calculo["danos"]),
         ("Ahorros", calculo["ahorros"]), ("Otros", calculo["otros"]),
@@ -186,6 +189,7 @@ else:
         "horas_extra_dominical_festivo_nocturna": horas_df["horas_extra_dominical_festivo_nocturna"].sum(),
         "horas_recargo_nocturno": horas_df["horas_recargo_nocturno"].sum(),
         "horas_recargo_dominical": horas_df["horas_recargo_dominical"].sum(),
+        "horas_recargo_dominical_festivo_nocturno": horas_df["horas_recargo_dominical_festivo_nocturno"].sum(),
         "horas_descuento": horas_df["horas_descuento"].sum(),
         "bonificacion": horas_df["bonificacion"].sum(),
         "deduccion": horas_df["deduccion"].sum(),

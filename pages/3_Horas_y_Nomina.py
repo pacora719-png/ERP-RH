@@ -27,7 +27,7 @@ identificacion_a_id = {
 COLUMNAS_DURACION = [
     "horas_normales", "horas_extra_diurna", "horas_extra_nocturna",
     "horas_extra_dominical_festivo", "horas_extra_dominical_festivo_nocturna",
-    "horas_recargo_nocturno", "horas_recargo_dominical", "horas_descuento"
+    "horas_recargo_nocturno", "horas_recargo_dominical", "horas_recargo_dominical_festivo_nocturno", "horas_descuento"
 ]
 
 
@@ -54,21 +54,43 @@ with tab_registrar:
         format_func=lambda x: empleados_df[empleados_df["id"] == x]["nombre"].values[0]
     )
 
+    st.subheader("Jornada del día")
+    fecha = st.date_input("Fecha", key="reg_fecha")
+    col1, col2 = st.columns(2)
+    with col1:
+        hora_entrada = st.time_input("Hora de entrada", value=time(8, 0), key="reg_entrada")
+    with col2:
+        hora_salida = st.time_input("Hora de salida", value=time(17, 0), key="reg_salida")
+
+    st.caption(f"Jornada normal: máximo {decimal_a_hhmm(horas_normales_max)} por día, después de descontar el tiempo no laboral.")
+
+    st.subheader("Tiempo a descontar (no laboral)")
+    tipo_descuento = st.selectbox("Tipo", ["Ninguno", "Alimentación", "Break", "No laboral (otro)"], key="reg_tipo_descuento")
+    horas_descuento = entrada_horas_minutos("Tiempo a descontar", "descuento")
+
+    # ---- Cálculo en vivo: apenas cambian entrada/salida/descuento, se recalcula el excedente ----
+    entrada_dt = datetime.combine(fecha, hora_entrada)
+    salida_dt = datetime.combine(fecha, hora_salida)
+    tiempo_bruto = max(0, (salida_dt - entrada_dt).total_seconds() / 3600)
+    tiempo_neto = max(0, tiempo_bruto - horas_descuento)
+    horas_normales_calc = min(tiempo_neto, horas_normales_max)
+    excedente = max(0, tiempo_neto - horas_normales_max)
+
+    st.info(
+        f"⏱️ Tiempo trabajado neto: **{decimal_a_hhmm(tiempo_neto)}** → "
+        f"Horas normales: **{decimal_a_hhmm(horas_normales_calc)}**"
+        + (f" | Excedente autocompletado como hora extra diurna: **{decimal_a_hhmm(excedente)}**" if excedente > 0 else "")
+    )
+
+    # Autocompletar 'Extra diurna' con el excedente (el usuario puede moverlo a otra categoría abajo)
+    exc_h = int(excedente)
+    exc_m = round((excedente - exc_h) * 60)
+    st.session_state["ed_h"] = exc_h
+    st.session_state["ed_m"] = exc_m
+
     with st.form("registrar_horas", clear_on_submit=True):
-        fecha = st.date_input("Fecha")
-        col1, col2 = st.columns(2)
-        with col1:
-            hora_entrada = st.time_input("Hora de entrada", value=time(8, 0))
-        with col2:
-            hora_salida = st.time_input("Hora de salida", value=time(17, 0))
-
-        st.caption(f"Jornada normal: máximo {decimal_a_hhmm(horas_normales_max)} por día, después de descontar el tiempo no laboral. Lo que exceda ese límite regístralo como hora extra abajo.")
-
-        st.subheader("Tiempo a descontar (no laboral)")
-        tipo_descuento = st.selectbox("Tipo", ["Ninguno", "Alimentación", "Break", "No laboral (otro)"])
-        horas_descuento = entrada_horas_minutos("Tiempo a descontar", "descuento")
-
         st.subheader("Horas extra")
+        st.caption("'Extra diurna' se autocompleta con el excedente sobre la jornada normal. Muévelo a otra categoría si el tiempo extra fue nocturno, dominical o festivo.")
         st.markdown("**Extra diurna**")
         horas_extra_diurna = entrada_horas_minutos("Extra diurna", "ed")
         st.markdown("**Extra nocturna**")
@@ -81,8 +103,10 @@ with tab_registrar:
         st.subheader("Recargos (no son horas extra)")
         st.markdown("**Recargo nocturno**")
         horas_recargo_nocturno = entrada_horas_minutos("Recargo nocturno", "rn")
-        st.markdown("**Recargo dominical**")
-        horas_recargo_dominical = entrada_horas_minutos("Recargo dominical", "rd")
+        st.markdown("**Recargo dominical/festivo**")
+        horas_recargo_dominical = entrada_horas_minutos("Recargo dominical/festivo", "rd")
+        st.markdown("**Recargo dominical/festivo nocturno**")
+        horas_recargo_dominical_festivo_nocturno = entrada_horas_minutos("Recargo dominical/festivo nocturno", "rdn")
 
         col7, col8 = st.columns(2)
         with col7:
@@ -94,13 +118,7 @@ with tab_registrar:
         guardar = st.form_submit_button("💾 Guardar registro")
 
     if guardar:
-        entrada_dt = datetime.combine(fecha, hora_entrada)
-        salida_dt = datetime.combine(fecha, hora_salida)
-        tiempo_bruto = max(0, (salida_dt - entrada_dt).total_seconds() / 3600)
-        tiempo_neto = max(0, tiempo_bruto - horas_descuento)
-        horas_normales = min(tiempo_neto, horas_normales_max)
-        excedente = max(0, tiempo_neto - horas_normales_max)
-
+        horas_normales = horas_normales_calc
         tipo_descuento_guardar = None if tipo_descuento == "Ninguno" else tipo_descuento
 
         with get_connection() as conn:
@@ -108,12 +126,12 @@ with tab_registrar:
                 INSERT INTO horas (empleado_id, fecha, hora_entrada, hora_salida, horas_normales,
                 horas_extra_diurna, horas_extra_nocturna, horas_extra_dominical_festivo,
                 horas_extra_dominical_festivo_nocturna, horas_recargo_nocturno, horas_recargo_dominical,
-                horas_descuento, tipo_descuento, bonificacion, deduccion, observacion)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                horas_recargo_dominical_festivo_nocturno, horas_descuento, tipo_descuento, bonificacion, deduccion, observacion)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (int(empleado_id), str(fecha), str(hora_entrada), str(hora_salida), round(horas_normales, 4),
                   horas_extra_diurna, horas_extra_nocturna, horas_extra_dominical_festivo,
                   horas_extra_dominical_festivo_nocturna, horas_recargo_nocturno, horas_recargo_dominical,
-                  horas_descuento, tipo_descuento_guardar, bonificacion, deduccion, observacion))
+                  horas_recargo_dominical_festivo_nocturno, horas_descuento, tipo_descuento_guardar, bonificacion, deduccion, observacion))
 
         mensaje = f"Registro guardado: {decimal_a_hhmm(horas_normales)} de horas normales."
         if excedente > 0:
@@ -170,20 +188,21 @@ with tab_historial:
         df["pago_extra_dom_festivo"] = df["horas_extra_dominical_festivo"] * df["valor_hora"] * m["extra_dominical_festivo"]
         df["pago_extra_dom_festivo_noc"] = df["horas_extra_dominical_festivo_nocturna"] * df["valor_hora"] * m["extra_dominical_festivo_nocturna"]
         df["pago_recargo_nocturno"] = df["horas_recargo_nocturno"] * df["valor_hora"] * m["recargo_nocturno"]
-        df["pago_recargo_dominical"] = df["horas_recargo_dominical"] * df["valor_hora"] * m["recargo_dominical"]
+        df["pago_recargo_dominical"] = df["horas_recargo_dominical"] * df["valor_hora"] * m["recargo_dominical_festivo"]
+        df["pago_recargo_dominical_nocturno"] = df["horas_recargo_dominical_festivo_nocturno"] * df["valor_hora"] * m["recargo_dominical_festivo_nocturno"]
         df["pago_descuento"] = df["horas_descuento"] * df["valor_hora"]
 
         df["total_a_pagar"] = (
             df["pago_normales"] + df["pago_extra_diurna"] + df["pago_extra_nocturna"]
             + df["pago_extra_dom_festivo"] + df["pago_extra_dom_festivo_noc"]
-            + df["pago_recargo_nocturno"] + df["pago_recargo_dominical"]
+            + df["pago_recargo_nocturno"] + df["pago_recargo_dominical"] + df["pago_recargo_dominical_nocturno"]
             + df["bonificacion"] - df["deduccion"] - df["pago_descuento"]
         )
 
         detalle_mostrar = df[[
             "fecha", "empleado_nombre", "ubicacion_nombre", "horas_normales", "horas_extra_diurna", "horas_extra_nocturna",
             "horas_extra_dominical_festivo", "horas_extra_dominical_festivo_nocturna",
-            "horas_recargo_nocturno", "horas_recargo_dominical", "horas_descuento", "tipo_descuento",
+            "horas_recargo_nocturno", "horas_recargo_dominical", "horas_recargo_dominical_festivo_nocturno", "horas_descuento", "tipo_descuento",
             "bonificacion", "deduccion", "total_a_pagar"
         ]]
         detalle_mostrar_hhmm = columnas_a_hhmm(detalle_mostrar, COLUMNAS_DURACION)
@@ -200,6 +219,7 @@ with tab_historial:
             horas_extra_dominical_festivo_nocturna=("horas_extra_dominical_festivo_nocturna", "sum"),
             horas_recargo_nocturno=("horas_recargo_nocturno", "sum"),
             horas_recargo_dominical=("horas_recargo_dominical", "sum"),
+            horas_recargo_dominical_festivo_nocturno=("horas_recargo_dominical_festivo_nocturno", "sum"),
             horas_descuento=("horas_descuento", "sum"),
             bonificaciones=("bonificacion", "sum"),
             deducciones=("deduccion", "sum"),
@@ -245,7 +265,7 @@ with tab_excel:
                        h.hora_entrada, h.hora_salida, h.horas_normales,
                        h.horas_extra_diurna, h.horas_extra_nocturna,
                        h.horas_extra_dominical_festivo, h.horas_extra_dominical_festivo_nocturna,
-                       h.horas_recargo_nocturno, h.horas_recargo_dominical,
+                       h.horas_recargo_nocturno, h.horas_recargo_dominical, h.horas_recargo_dominical_festivo_nocturno,
                        h.horas_descuento, h.tipo_descuento, h.bonificacion, h.deduccion, h.observacion
                 FROM horas h
                 JOIN empleados e ON h.empleado_id = e.id
@@ -292,7 +312,7 @@ with tab_excel:
                 "identificacion_empleado", "fecha", "hora_entrada", "hora_salida",
                 "horas_extra_diurna", "horas_extra_nocturna", "horas_extra_dominical_festivo",
                 "horas_extra_dominical_festivo_nocturna", "horas_recargo_nocturno", "horas_recargo_dominical",
-                "horas_descuento", "tipo_descuento", "bonificacion", "deduccion", "observacion"
+                "horas_recargo_dominical_festivo_nocturno", "horas_descuento", "tipo_descuento", "bonificacion", "deduccion", "observacion"
             }
             faltantes = columnas_esperadas - set(df_carga.columns)
             if faltantes:
@@ -334,8 +354,8 @@ with tab_excel:
                                     INSERT INTO horas (empleado_id, fecha, hora_entrada, hora_salida, horas_normales,
                                     horas_extra_diurna, horas_extra_nocturna, horas_extra_dominical_festivo,
                                     horas_extra_dominical_festivo_nocturna, horas_recargo_nocturno, horas_recargo_dominical,
-                                    horas_descuento, tipo_descuento, bonificacion, deduccion, observacion)
-                                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                    horas_recargo_dominical_festivo_nocturno, horas_descuento, tipo_descuento, bonificacion, deduccion, observacion)
+                                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                                 """, (
                                     emp_id, fecha_fila, hora_ent, hora_sal, round(horas_normales_fila, 4),
                                     texto_hhmm_a_decimal(fila.get("horas_extra_diurna", 0)),
@@ -344,6 +364,7 @@ with tab_excel:
                                     texto_hhmm_a_decimal(fila.get("horas_extra_dominical_festivo_nocturna", 0)),
                                     texto_hhmm_a_decimal(fila.get("horas_recargo_nocturno", 0)),
                                     texto_hhmm_a_decimal(fila.get("horas_recargo_dominical", 0)),
+                                    texto_hhmm_a_decimal(fila.get("horas_recargo_dominical_festivo_nocturno", 0)),
                                     horas_desc, tipo_desc,
                                     float(fila.get("bonificacion", 0) or 0),
                                     float(fila.get("deduccion", 0) or 0),
