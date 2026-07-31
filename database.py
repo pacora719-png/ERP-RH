@@ -264,4 +264,5 @@ def get_parametros_nomina():
         "pension_pct": float(get_config("pension_pct", "4")) / 100,
         "auxilio_transporte_mensual": float(get_config("auxilio_transporte_mensual", "249095")),
         "tope_salarial_auxilio_transporte": float(get_config("tope_salarial_auxilio_transporte", "3501810")),
+        "horas_normales_por_dia": float(get_config("horas_normales_por_dia", "7")),
     }

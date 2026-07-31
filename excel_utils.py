@@ -4,7 +4,53 @@ leer plantillas de Excel para carga masiva, y generar PDFs
 de liquidación de nómina.
 """
 import io
+import re
 import pandas as pd
+
+
+def hhmm_a_decimal(horas: int, minutos: int) -> float:
+    """Convierte horas y minutos por separado a un número decimal de horas (para cálculos internos)."""
+    return round((horas or 0) + (minutos or 0) / 60, 4)
+
+
+def decimal_a_hhmm(valor_decimal: float) -> str:
+    """Convierte un número decimal de horas a texto 'Hh Mm' para mostrar."""
+    if valor_decimal is None:
+        valor_decimal = 0
+    total_minutos = round(float(valor_decimal) * 60)
+    horas, minutos = divmod(total_minutos, 60)
+    return f"{horas}h {minutos:02d}m"
+
+
+def texto_hhmm_a_decimal(texto) -> float:
+    """Convierte un texto tipo '2h 30m', '2:30' o '2.5' a decimal de horas. Vacío o inválido -> 0."""
+    if texto is None:
+        return 0.0
+    texto = str(texto).strip()
+    if not texto or texto.lower() == "nan":
+        return 0.0
+
+    match_hhmm = re.match(r"^(\d+)\s*h\s*(\d+)\s*m?$", texto, re.IGNORECASE)
+    if match_hhmm:
+        return hhmm_a_decimal(int(match_hhmm.group(1)), int(match_hhmm.group(2)))
+
+    match_colon = re.match(r"^(\d+):(\d+)$", texto)
+    if match_colon:
+        return hhmm_a_decimal(int(match_colon.group(1)), int(match_colon.group(2)))
+
+    try:
+        return float(texto)
+    except ValueError:
+        return 0.0
+
+
+def columnas_a_hhmm(df: pd.DataFrame, columnas: list) -> pd.DataFrame:
+    """Devuelve una copia del DataFrame con las columnas indicadas convertidas de decimal a texto 'Hh Mm'."""
+    df_copia = df.copy()
+    for col in columnas:
+        if col in df_copia.columns:
+            df_copia[col] = df_copia[col].apply(decimal_a_hhmm)
+    return df_copia
 
 
 def exportar_excel(df: pd.DataFrame, nombre_hoja: str = "Datos") -> bytes:
@@ -32,7 +78,8 @@ def plantilla_empleados() -> bytes:
 
 def plantilla_horas() -> bytes:
     """Genera una plantilla vacía para cargar horas de varios empleados a la vez.
-    Se identifica al empleado por su número de identificación."""
+    Se identifica al empleado por su número de identificación. Las duraciones se
+    escriben en formato 'Hh Mm' (por ejemplo '2h 30m'), no en decimales."""
     columnas = [
         "identificacion_empleado", "fecha", "hora_entrada", "hora_salida",
         "horas_extra_diurna", "horas_extra_nocturna", "horas_extra_dominical_festivo",
@@ -41,7 +88,8 @@ def plantilla_horas() -> bytes:
     ]
     fila_ejemplo = [
         "1234567890", "2026-07-01", "08:00", "17:00",
-        2, 0, 0, 0, 0, 0, 1, "Alimentación", 0, 0, ""
+        "2h 00m", "0h 00m", "0h 00m", "0h 00m", "0h 00m", "0h 00m",
+        "1h 00m", "Alimentación", 0, 0, ""
     ]
     df = pd.DataFrame([fila_ejemplo], columns=columnas)
     return exportar_excel(df, "Horas")
