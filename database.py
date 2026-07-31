@@ -63,7 +63,7 @@ def get_connection():
     if IS_POSTGRES:
         import psycopg2
         import psycopg2.extras
-        conn = psycopg2.connect(DATABASE_URL, cursor_factory=psycopg2.extras.RealDictCursor)
+        conn = psycopg2.connect(DATABASE_URL)
         try:
             yield conn
             conn.commit()
@@ -90,7 +90,8 @@ def execute(conn, sql: str, params=None):
     devuelve un cursor con fetchone()/fetchall() disponibles, igual en ambos motores."""
     sql_t = _sql(sql)
     if IS_POSTGRES:
-        cur = conn.cursor()
+        import psycopg2.extras
+        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
         cur.execute(sql_t, params or ())
         return cur
     return conn.execute(sql_t, params or ())
