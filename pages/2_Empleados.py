@@ -103,12 +103,13 @@ with tab_lista:
 
         if guardar:
             valor_hora = salario_base / horas_mensuales if horas_mensuales else 0
+            identificacion_guardar = identificacion.strip() if identificacion and identificacion.strip() else None
             with get_connection() as conn:
                 execute(conn, """
                     UPDATE empleados SET nombre=?, identificacion=?, cargo=?, ubicacion_id=?, fecha_ingreso=?,
                     salario_base=?, valor_hora=?, telefono=?, estado=?, eps=?, fondo_pension=?, arl=?, caja_compensacion=?
                     WHERE id=?
-                """, (nombre, identificacion, cargo, ubicacion_id, fecha_ingreso, salario_base, valor_hora,
+                """, (nombre, identificacion_guardar, cargo, ubicacion_id, fecha_ingreso, salario_base, valor_hora,
                       telefono, estado, eps, fondo_pension, arl, caja_compensacion, int(emp_id)))
             st.success("Empleado actualizado.")
             st.rerun()
@@ -153,12 +154,13 @@ with tab_nuevo:
             st.error("El nombre es obligatorio.")
         else:
             valor_hora = salario_base / horas_mensuales if horas_mensuales else 0
+            identificacion_guardar = identificacion.strip() if identificacion and identificacion.strip() else None
             with get_connection() as conn:
                 execute(conn, """
                     INSERT INTO empleados (nombre, identificacion, cargo, ubicacion_id, fecha_ingreso, salario_base,
                     valor_hora, telefono, eps, fondo_pension, arl, caja_compensacion)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """, (nombre, identificacion, cargo, ubicacion_id, str(fecha_ingreso), salario_base, valor_hora,
+                """, (nombre, identificacion_guardar, cargo, ubicacion_id, str(fecha_ingreso), salario_base, valor_hora,
                       telefono, eps, fondo_pension, arl, caja_compensacion))
             st.success(f"Empleado '{nombre}' agregado correctamente.")
 
@@ -215,13 +217,15 @@ with tab_excel:
                             valor_hora_fila = salario_base_fila / horas_mensuales if horas_mensuales else 0
 
                             try:
+                                identificacion_fila = str(fila.get("identificacion", "")).strip()
+                                identificacion_fila = identificacion_fila if identificacion_fila and identificacion_fila.lower() != "nan" else None
                                 execute(conn, """
                                     INSERT INTO empleados (nombre, identificacion, cargo, ubicacion_id, fecha_ingreso,
                                     salario_base, valor_hora, telefono, eps, fondo_pension, arl, caja_compensacion)
                                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                                 """, (
                                     nombre_fila,
-                                    str(fila.get("identificacion", "")).strip(),
+                                    identificacion_fila,
                                     str(fila.get("cargo", "")).strip(),
                                     ubicacion_id,
                                     str(fila.get("fecha_ingreso", "")).strip(),
