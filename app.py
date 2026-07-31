@@ -1,5 +1,5 @@
 import streamlit as st
-from database import init_db, get_config, set_config
+from database import init_db, get_config, set_config, get_db_status
 
 st.set_page_config(page_title="ERP", page_icon="🏢", layout="wide")
 
@@ -42,6 +42,17 @@ st.sidebar.success(f"Sesión iniciada como: {st.session_state.usuario}")
 if st.sidebar.button("Cerrar sesión"):
     st.session_state.autenticado = False
     st.rerun()
+
+st.sidebar.divider()
+db_status = get_db_status()
+if db_status["database_url_detectada"]:
+    if db_status["conexion_ok"]:
+        st.sidebar.success(f"🗄️ Base de datos: {db_status['motor']} ✅ conectada")
+    else:
+        st.sidebar.error(f"🗄️ Base de datos: {db_status['motor']} ❌ error de conexión")
+        st.sidebar.caption(f"Detalle: {db_status['error']}")
+else:
+    st.sidebar.warning(f"🗄️ Base de datos: {db_status['motor']}")
 
 st.title(f"🏢 {nombre_empresa}")
 st.markdown("""

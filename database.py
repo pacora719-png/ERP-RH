@@ -37,6 +37,24 @@ DATABASE_URL = _get_database_url()
 IS_POSTGRES = bool(DATABASE_URL)
 
 
+def get_db_status():
+    """Diagnóstico: qué motor de base de datos está activo, y si la conexión real funciona."""
+    estado = {
+        "motor": "PostgreSQL (Neon)" if IS_POSTGRES else "SQLite local (no persistente en Streamlit Cloud)",
+        "database_url_detectada": IS_POSTGRES,
+        "conexion_ok": False,
+        "error": None,
+    }
+    try:
+        with get_connection() as conn:
+            cur = conn.cursor()
+            cur.execute("SELECT 1")
+        estado["conexion_ok"] = True
+    except Exception as e:
+        estado["error"] = str(e)
+    return estado
+
+
 @contextmanager
 def get_connection():
     """Context manager que da una conexión lista para usar, a SQLite o PostgreSQL
