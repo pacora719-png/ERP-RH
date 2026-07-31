@@ -47,11 +47,12 @@ st.title(f"🏢 {nombre_empresa}")
 st.markdown("""
 Usa el menú de la izquierda para navegar entre los módulos:
 
-- ⏱️ **Horas y Nómina** — registro de horas trabajadas, extras, bonificaciones y deducciones
+- ⚙️ **Configuración** — datos de la empresa, ubicaciones y parámetros de nómina
 - 👥 **Empleados** — expedientes del personal
+- ⏱️ **Horas y Nómina** — registro de horas, extras, recargos y tiempo a descontar
 - 📅 **Asistencia** — vacaciones, permisos e incapacidades
-- 📦 **Inventario** — control de insumos y stock
-- ⚙️ **Configuración** — nombre de la empresa y ubicaciones/sedes
+- 📄 **Cancelaciones de contrato** — retiros, liquidaciones e indemnizaciones
+- 🧾 **Liquidador de Nómina** — genera la colilla de pago en PDF por período
 - 📊 **Reportes** — resumen general del negocio
 """)
 
