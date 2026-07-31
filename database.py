@@ -175,6 +175,7 @@ def init_db():
             "horas_extra_dominical_festivo_nocturna": "REAL DEFAULT 0",
             "horas_recargo_nocturno": "REAL DEFAULT 0",
             "horas_recargo_dominical": "REAL DEFAULT 0",
+            "horas_recargo_dominical_festivo_nocturno": "REAL DEFAULT 0",
             "horas_descuento": "REAL DEFAULT 0",
             "tipo_descuento": "TEXT",
         })
@@ -234,7 +235,8 @@ def get_multiplicadores():
     calculados a partir de los recargos (%) guardados en configuración.
     Los valores por defecto igualan el liquidador de referencia:
     extra diurna 1.25, extra nocturna 1.75, extra dominical/festivo 2.15,
-    extra dominical/festivo nocturna 2.65, recargo nocturno 0.35, recargo dominical 0.90."""
+    extra dominical/festivo nocturna 2.65, recargo nocturno 0.35,
+    recargo dominical/festivo 1.00, recargo dominical/festivo nocturno 1.50."""
     def mult(clave, default_pct):
         pct = float(get_config(clave, str(default_pct)))
         return 1 + (pct / 100)
@@ -249,7 +251,8 @@ def get_multiplicadores():
         "extra_dominical_festivo": mult("recargo_extra_dominical_festivo", 115),
         "extra_dominical_festivo_nocturna": mult("recargo_extra_dominical_festivo_nocturna", 165),
         "recargo_nocturno": factor("recargo_nocturno", 35),
-        "recargo_dominical": factor("recargo_dominical", 90),
+        "recargo_dominical_festivo": factor("recargo_dominical_festivo", 100),
+        "recargo_dominical_festivo_nocturno": factor("recargo_dominical_festivo_nocturno", 150),
     }
 
 

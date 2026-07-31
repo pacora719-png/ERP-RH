@@ -84,11 +84,12 @@ def plantilla_horas() -> bytes:
         "identificacion_empleado", "fecha", "hora_entrada", "hora_salida",
         "horas_extra_diurna", "horas_extra_nocturna", "horas_extra_dominical_festivo",
         "horas_extra_dominical_festivo_nocturna", "horas_recargo_nocturno", "horas_recargo_dominical",
-        "horas_descuento", "tipo_descuento", "bonificacion", "deduccion", "observacion"
+        "horas_recargo_dominical_festivo_nocturno", "horas_descuento", "tipo_descuento",
+        "bonificacion", "deduccion", "observacion"
     ]
     fila_ejemplo = [
         "1234567890", "2026-07-01", "08:00", "17:00",
-        "2h 00m", "0h 00m", "0h 00m", "0h 00m", "0h 00m", "0h 00m",
+        "2h 00m", "0h 00m", "0h 00m", "0h 00m", "0h 00m", "0h 00m", "0h 00m",
         "1h 00m", "Alimentación", 0, 0, ""
     ]
     df = pd.DataFrame([fila_ejemplo], columns=columnas)
