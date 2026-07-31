@@ -115,6 +115,12 @@ with tab_nomina:
         pension_pct = st.number_input("Pensión a cargo del empleado (%)", value=float(get_config("pension_pct", "4")), step=0.5)
         tope_auxilio = st.number_input("Tope salarial para recibir auxilio de transporte", value=float(get_config("tope_salarial_auxilio_transporte", "3501810")), step=10000.0)
 
+    horas_normales_dia = st.number_input(
+        "Horas normales máximas por día (jornada legal — ej. 7h/día = 42h/semana)",
+        value=float(get_config("horas_normales_por_dia", "7")), step=0.5,
+        help="Lo que se trabaje por encima de este límite, después de descontar el tiempo no laboral, se sugiere registrar como hora extra."
+    )
+
     if st.button("💾 Guardar parámetros de nómina"):
         set_config("horas_mensuales", str(horas_mensuales))
         set_config("recargo_extra_diurna", str(recargo_diurna))
@@ -127,5 +133,6 @@ with tab_nomina:
         set_config("pension_pct", str(pension_pct))
         set_config("auxilio_transporte_mensual", str(auxilio_transporte))
         set_config("tope_salarial_auxilio_transporte", str(tope_auxilio))
+        set_config("horas_normales_por_dia", str(horas_normales_dia))
         st.success("Parámetros guardados.")
         st.rerun()
