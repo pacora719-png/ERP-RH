@@ -23,6 +23,10 @@ identificacion_a_id = {
     str(row["identificacion"]).strip(): row["id"]
     for _, row in empleados_df.iterrows() if row["identificacion"]
 }
+nombre_a_id = {
+    str(row["nombre"]).strip().lower(): row["id"]
+    for _, row in empleados_df.iterrows() if row["nombre"]
+}
 
 COLUMNAS_DURACION = [
     "horas_normales", "horas_extra_diurna", "horas_extra_nocturna",
@@ -288,7 +292,7 @@ with tab_excel:
 
     st.divider()
     st.subheader("Descargar plantilla para cargar horas")
-    st.caption("Descarga la plantilla, llénala (una fila por día trabajado por empleado) y súbela abajo. El empleado se identifica por su número de identificación.")
+    st.caption("Descarga la plantilla, llénala (una fila por día trabajado por empleado) y súbela abajo. Identifica al empleado por su número de identificación; si todavía no la tiene registrada, puedes usar su nombre exacto en la columna 'nombre_empleado' en su lugar.")
     st.download_button(
         "⬇️ Descargar plantilla de Excel",
         data=plantilla_horas(),
@@ -309,7 +313,7 @@ with tab_excel:
 
         if df_carga is not None:
             columnas_esperadas = {
-                "identificacion_empleado", "fecha", "hora_entrada", "hora_salida",
+                "identificacion_empleado", "nombre_empleado", "fecha", "hora_entrada", "hora_salida",
                 "horas_extra_diurna", "horas_extra_nocturna", "horas_extra_dominical_festivo",
                 "horas_extra_dominical_festivo_nocturna", "horas_recargo_nocturno", "horas_recargo_dominical",
                 "horas_recargo_dominical_festivo_nocturno", "horas_descuento", "tipo_descuento", "bonificacion", "deduccion", "observacion"
@@ -326,12 +330,24 @@ with tab_excel:
                     with get_connection() as conn:
                         for i, fila in df_carga.iterrows():
                             identificacion = str(fila.get("identificacion_empleado", "")).strip()
-                            if not identificacion or identificacion.lower() == "nan":
+                            if identificacion.lower() == "nan":
+                                identificacion = ""
+                            nombre_fila = str(fila.get("nombre_empleado", "")).strip()
+                            if nombre_fila.lower() == "nan":
+                                nombre_fila = ""
+
+                            if not identificacion and not nombre_fila:
                                 continue
 
-                            emp_id = identificacion_a_id.get(identificacion)
+                            emp_id = None
+                            if identificacion:
+                                emp_id = identificacion_a_id.get(identificacion)
+                            if emp_id is None and nombre_fila:
+                                emp_id = nombre_a_id.get(nombre_fila.lower())
+
                             if emp_id is None:
-                                errores.append(f"Fila {i + 2}: no existe un empleado activo con identificación '{identificacion}'.")
+                                referencia = identificacion or nombre_fila
+                                errores.append(f"Fila {i + 2}: no se encontró un empleado activo con identificación/nombre '{referencia}'.")
                                 continue
 
                             try:
@@ -372,7 +388,7 @@ with tab_excel:
                                 ))
                                 insertados += 1
                             except Exception as e:
-                                errores.append(f"Fila {i + 2} ({identificacion}): {e}")
+                                errores.append(f"Fila {i + 2} ({identificacion or nombre_fila}): {e}")
 
                     if insertados:
                         st.success(f"Se cargaron {insertados} registro(s) de horas correctamente.")
