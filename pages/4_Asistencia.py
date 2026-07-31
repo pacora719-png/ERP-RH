@@ -1,6 +1,6 @@
 import streamlit as st
 import pandas as pd
-from database import get_connection
+from database import get_connection, execute, read_sql_query
 from excel_utils import exportar_excel
 
 st.set_page_config(page_title="Asistencia", page_icon="📅", layout="wide")
@@ -12,7 +12,7 @@ if not st.session_state.get("autenticado"):
 st.title("📅 Asistencia")
 
 with get_connection() as conn:
-    empleados_df = pd.read_sql_query("SELECT * FROM empleados WHERE estado='Activo' ORDER BY nombre", conn)
+    empleados_df = read_sql_query("SELECT * FROM empleados WHERE estado='Activo' ORDER BY nombre", conn)
 
 if empleados_df.empty:
     st.warning("No hay empleados activos. Ve a **Empleados** para agregar al menos uno.")
@@ -41,7 +41,7 @@ with tab_registrar:
             st.error("La fecha fin no puede ser anterior a la fecha inicio.")
         else:
             with get_connection() as conn:
-                conn.execute("""
+                execute(conn, """
                     INSERT INTO asistencia (empleado_id, fecha_inicio, fecha_fin, tipo, comentario)
                     VALUES (?, ?, ?, ?, ?)
                 """, (int(empleado_id), str(fecha_inicio), str(fecha_fin), tipo, comentario))
@@ -49,7 +49,7 @@ with tab_registrar:
 
 with tab_historial:
     with get_connection() as conn:
-        df = pd.read_sql_query("""
+        df = read_sql_query("""
             SELECT a.*, e.nombre AS empleado_nombre
             FROM asistencia a JOIN empleados e ON a.empleado_id = e.id
             ORDER BY a.fecha_inicio DESC
@@ -78,6 +78,6 @@ with tab_historial:
         registro_id = st.selectbox("Eliminar un registro", df["id"].tolist())
         if st.button("🗑️ Eliminar registro seleccionado"):
             with get_connection() as conn:
-                conn.execute("DELETE FROM asistencia WHERE id=?", (int(registro_id),))
+                execute(conn, "DELETE FROM asistencia WHERE id=?", (int(registro_id),))
             st.success("Registro eliminado.")
             st.rerun()

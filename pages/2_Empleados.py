@@ -1,6 +1,6 @@
 import streamlit as st
 import pandas as pd
-from database import get_connection, get_ubicaciones
+from database import get_connection, get_ubicaciones, get_horas_mensuales, execute, read_sql_query
 from excel_utils import exportar_excel, plantilla_empleados
 
 st.set_page_config(page_title="Empleados", page_icon="👥", layout="wide")
@@ -18,12 +18,13 @@ if not ubicaciones:
 
 ubicacion_nombres = {u["id"]: u["nombre"] for u in ubicaciones}
 ubicacion_por_nombre = {v: k for k, v in ubicacion_nombres.items()}
+horas_mensuales = get_horas_mensuales()
 
 tab_lista, tab_nuevo, tab_excel = st.tabs(["📋 Lista de empleados", "➕ Nuevo empleado", "📁 Cargar/Descargar Excel"])
 
 with tab_lista:
     with get_connection() as conn:
-        df = pd.read_sql_query("""
+        df = read_sql_query("""
             SELECT e.*, u.nombre AS ubicacion_nombre
             FROM empleados e LEFT JOIN ubicaciones u ON e.ubicacion_id = u.id
             ORDER BY e.nombre
@@ -32,12 +33,21 @@ with tab_lista:
     if df.empty:
         st.info("Todavía no hay empleados registrados. Agrega el primero en la pestaña 'Nuevo empleado'.")
     else:
+        filtro_estado = st.selectbox("Filtrar por estado", ["Activos", "Todos", "Inactivos"])
+        if filtro_estado == "Activos":
+            df_mostrar = df[df["estado"] == "Activo"]
+        elif filtro_estado == "Inactivos":
+            df_mostrar = df[df["estado"] == "Inactivo"]
+        else:
+            df_mostrar = df
+
         filtro_ubicacion = st.selectbox("Filtrar por ubicación", ["Todas"] + list(ubicacion_nombres.values()))
-        df_mostrar = df if filtro_ubicacion == "Todas" else df[df["ubicacion_nombre"] == filtro_ubicacion]
+        if filtro_ubicacion != "Todas":
+            df_mostrar = df_mostrar[df_mostrar["ubicacion_nombre"] == filtro_ubicacion]
 
         st.dataframe(
             df_mostrar[["id", "nombre", "identificacion", "cargo", "ubicacion_nombre",
-                        "fecha_ingreso", "estado", "eps", "fondo_pension", "arl", "caja_compensacion"]],
+                        "fecha_ingreso", "salario_base", "estado", "eps", "fondo_pension", "arl", "caja_compensacion"]],
             use_container_width=True,
             hide_index=True
         )
@@ -73,7 +83,7 @@ with tab_lista:
             with col2:
                 fecha_ingreso = st.text_input("Fecha de ingreso (AAAA-MM-DD)", emp["fecha_ingreso"] or "")
                 salario_base = st.number_input("Salario base", value=float(emp["salario_base"] or 0))
-                valor_hora = st.number_input("Valor hora", value=float(emp["valor_hora"] or 0))
+                st.caption(f"Valor hora calculado: ${(salario_base / horas_mensuales):,.0f} (salario ÷ {horas_mensuales:.0f} horas)")
                 telefono = st.text_input("Teléfono", emp["telefono"] or "")
                 estado = st.selectbox("Estado", ["Activo", "Inactivo"],
                                        index=0 if emp["estado"] == "Activo" else 1)
@@ -92,19 +102,20 @@ with tab_lista:
             eliminar = col_b.form_submit_button("🗑️ Eliminar empleado")
 
         if guardar:
+            valor_hora = salario_base / horas_mensuales if horas_mensuales else 0
             with get_connection() as conn:
-                conn.execute("""
+                execute(conn, """
                     UPDATE empleados SET nombre=?, identificacion=?, cargo=?, ubicacion_id=?, fecha_ingreso=?,
                     salario_base=?, valor_hora=?, telefono=?, estado=?, eps=?, fondo_pension=?, arl=?, caja_compensacion=?
                     WHERE id=?
-                """, (nombre, identificacion, cargo, ubicacion_id, fecha_ingreso, salario_base,
-                      valor_hora, telefono, estado, eps, fondo_pension, arl, caja_compensacion, int(emp_id)))
+                """, (nombre, identificacion, cargo, ubicacion_id, fecha_ingreso, salario_base, valor_hora,
+                      telefono, estado, eps, fondo_pension, arl, caja_compensacion, int(emp_id)))
             st.success("Empleado actualizado.")
             st.rerun()
 
         if eliminar:
             with get_connection() as conn:
-                conn.execute("DELETE FROM empleados WHERE id=?", (int(emp_id),))
+                execute(conn, "DELETE FROM empleados WHERE id=?", (int(emp_id),))
             st.success("Empleado eliminado.")
             st.rerun()
 
@@ -122,7 +133,8 @@ with tab_nuevo:
         with col2:
             fecha_ingreso = st.date_input("Fecha de ingreso")
             salario_base = st.number_input("Salario base", min_value=0.0, step=10000.0)
-            valor_hora = st.number_input("Valor hora", min_value=0.0, step=1000.0)
+            if salario_base:
+                st.caption(f"Valor hora calculado: ${(salario_base / horas_mensuales):,.0f}")
             telefono = st.text_input("Teléfono")
 
         st.markdown("**Afiliaciones**")
@@ -140,8 +152,9 @@ with tab_nuevo:
         if not nombre:
             st.error("El nombre es obligatorio.")
         else:
+            valor_hora = salario_base / horas_mensuales if horas_mensuales else 0
             with get_connection() as conn:
-                conn.execute("""
+                execute(conn, """
                     INSERT INTO empleados (nombre, identificacion, cargo, ubicacion_id, fecha_ingreso, salario_base,
                     valor_hora, telefono, eps, fondo_pension, arl, caja_compensacion)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -151,7 +164,7 @@ with tab_nuevo:
 
 with tab_excel:
     st.subheader("Descargar plantilla")
-    st.caption("Descarga la plantilla, llénala con tus empleados (una fila por persona) y súbela abajo.")
+    st.caption("Descarga la plantilla, llénala con tus empleados (una fila por persona) y súbela abajo. El valor hora se calcula automáticamente a partir del salario base, no hace falta incluirlo.")
     st.download_button(
         "⬇️ Descargar plantilla de Excel",
         data=plantilla_empleados(),
@@ -174,7 +187,7 @@ with tab_excel:
         if df_carga is not None:
             columnas_esperadas = {
                 "nombre", "identificacion", "cargo", "ubicacion", "fecha_ingreso",
-                "salario_base", "valor_hora", "telefono", "eps", "fondo_pension",
+                "salario_base", "telefono", "eps", "fondo_pension",
                 "arl", "caja_compensacion"
             }
             faltantes = columnas_esperadas - set(df_carga.columns)
@@ -198,8 +211,11 @@ with tab_excel:
                                 errores.append(f"Fila {i + 2}: ubicación '{ubicacion_nombre}' no existe. Créala en Configuración.")
                                 continue
 
+                            salario_base_fila = float(fila.get("salario_base", 0) or 0)
+                            valor_hora_fila = salario_base_fila / horas_mensuales if horas_mensuales else 0
+
                             try:
-                                conn.execute("""
+                                execute(conn, """
                                     INSERT INTO empleados (nombre, identificacion, cargo, ubicacion_id, fecha_ingreso,
                                     salario_base, valor_hora, telefono, eps, fondo_pension, arl, caja_compensacion)
                                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -209,8 +225,8 @@ with tab_excel:
                                     str(fila.get("cargo", "")).strip(),
                                     ubicacion_id,
                                     str(fila.get("fecha_ingreso", "")).strip(),
-                                    float(fila.get("salario_base", 0) or 0),
-                                    float(fila.get("valor_hora", 0) or 0),
+                                    salario_base_fila,
+                                    valor_hora_fila,
                                     str(fila.get("telefono", "")).strip(),
                                     str(fila.get("eps", "")).strip(),
                                     str(fila.get("fondo_pension", "")).strip(),
